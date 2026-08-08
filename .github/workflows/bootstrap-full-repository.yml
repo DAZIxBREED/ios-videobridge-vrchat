@@ -1,0 +1,54 @@
+name: Bootstrap Phase 0 and 1 Repository
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/bootstrap-full-repository.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  populate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore complete Phase 0 and Phase 1 tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .bootstrap/chunk-* > /tmp/ios-videobridge-repository.tar.gz.b64
+          base64 --decode /tmp/ios-videobridge-repository.tar.gz.b64 > /tmp/ios-videobridge-repository.tar.gz
+          echo "45d8f793ed45fe6e782a414e54326a71d376a0c6e23579df9b06eca71bf20904  /tmp/ios-videobridge-repository.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/ios-videobridge-repository.tar.gz -C .
+
+      - name: Generate known-good binary media
+        shell: bash
+        run: |
+          set -euo pipefail
+          HLS_DIR="Assets/StreamingAssets/IOSVideoBridge/hls-vod"
+          mkdir -p /tmp/ios-videobridge-hls-meta
+          cp "$HLS_DIR"/*.meta /tmp/ios-videobridge-hls-meta/
+          chmod +x scripts/*.sh
+          ./scripts/generate-test-media.sh
+          cp /tmp/ios-videobridge-hls-meta/*.meta "$HLS_DIR"/
+
+      - name: Commit populated repository and release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .bootstrap
+          rm -f .github/workflows/bootstrap-full-repository.yml
+          git config user.name "DAZIxBREED"
+          git config user.email "196238557+DAZIxBREED@users.noreply.github.com"
+          git add -A
+          git commit -m "Import Phase 0 and Phase 1 Unity project"
+          git tag -f v0.1.0-phase1
+          git push origin HEAD:main
+          git push --force origin v0.1.0-phase1
