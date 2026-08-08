@@ -1,0 +1,70 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!129 &1
+PlayerSettings:
+  m_ObjectHideFlags: 0
+  serializedVersion: 26
+  productGUID: 6e5f4f4aa80b4ca5b9b1e28134b74601
+  companyName: DAZIxBREED
+  productName: iOS VideoBridge for VRChat
+  defaultScreenOrientation: 3
+  defaultScreenWidth: 1280
+  defaultScreenHeight: 720
+  defaultIsNativeResolution: 1
+  runInBackground: 1
+  muteOtherAudioSources: 0
+  m_ActiveColorSpace: 0
+  m_MTRendering: 1
+  metalFramebufferOnly: 0
+  bundleVersion: 0.1.0
+  applicationIdentifier:
+    Standalone: com.dazixbreed.iosvideobridge
+    iPhone: com.dazixbreed.iosvideobridge
+  buildNumber:
+    Standalone: 0
+    iPhone: 0
+  overrideDefaultApplicationIdentifier: 1
+  stripEngineCode: 1
+  iPhoneSdkVersion: 988
+  iOSTargetOSVersionString: 12.0
+  uIRequiresFullScreen: 1
+  uIStatusBarHidden: 1
+  exitOnSuspend: 0
+  iOSLaunchScreenType: 0
+  iOSLaunchScreenPortrait: {fileID: 0}
+  iOSLaunchScreenLandscape: {fileID: 0}
+  iOSLaunchScreenBackgroundColor:
+    serializedVersion: 2
+    rgba: 0
+  iOSLaunchScreenFillPct: 100
+  iOSLaunchScreenSize: 100
+  iOSBackgroundModes: 0
+  metalEditorSupport: 1
+  metalAPIValidation: 1
+  iOSRenderExtraFrameOnPause: 0
+  iosCopyPluginsCodeInsteadOfSymlink: 0
+  appleDeveloperTeamID:
+  iOSManualProvisioningProfileID:
+  iOSManualProvisioningProfileType: 0
+  appleEnableAutomaticSigning: 0
+  iOSRequireARKit: 0
+  iOSAutomaticallyDetectAndAddCapabilities: 1
+  appleEnableProMotion: 0
+  cameraUsageDescription: VideoBridge does not access the camera.
+  locationUsageDescription: VideoBridge does not access location.
+  microphoneUsageDescription: VideoBridge does not access the microphone.
+  bluetoothUsageDescription: VideoBridge may test output through connected Bluetooth audio devices.
+  scriptingBackend:
+    iPhone: 1
+  managedStrippingLevel:
+    iPhone: 1
+  suppressCommonWarnings: 1
+  allowUnsafeCode: 0
+  useDeterministicCompilation: 1
+  scriptingRuntimeVersion: 1
+  gcIncremental: 1
+  gcWBarrierValidation: 0
+  projectName: ios-videobridge-vrchat
+  organizationId: dazixbreed
+  cloudEnabled: 0
+  insecureHttpOption: 0

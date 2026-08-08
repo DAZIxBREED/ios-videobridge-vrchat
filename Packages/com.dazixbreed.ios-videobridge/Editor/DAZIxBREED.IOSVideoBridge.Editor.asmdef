@@ -1,0 +1,11 @@
+{
+  "name": "DAZIxBREED.IOSVideoBridge.Editor",
+  "rootNamespace": "DAZIxBREED.IOSVideoBridge.Editor",
+  "references": [
+    "DAZIxBREED.IOSVideoBridge"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "autoReferenced": true
+}

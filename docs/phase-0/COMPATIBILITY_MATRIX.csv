@@ -1,0 +1,8 @@
+test_id,media,reference_unity,reference_native,vrchat_unity,vrchat_avpro,device,ios_version,result_owner,notes
+MP4-001,H264_AAC_MP4,NOT_RUN,NOT_IMPLEMENTED,NOT_RUN,NOT_RUN,,,UNASSIGNED,Bundled synthetic sample
+HLS-001,HLS_VOD,NOT_RUN,NOT_IMPLEMENTED,NOT_RUN,NOT_RUN,,,UNASSIGNED,Host over trusted HTTPS for device testing
+HLS-002,HLS_LIVE,NOT_RUN,NOT_IMPLEMENTED,NOT_RUN,NOT_RUN,,,UNASSIGNED,Requires stable public or controlled live source
+AUD-001,AUDIO_OUTPUT,NOT_RUN,NOT_IMPLEMENTED,NOT_RUN,NOT_RUN,,,UNASSIGNED,Verify speaker/headphones/Bluetooth
+VID-001,VIDEO_ORIENTATION,NOT_RUN,NOT_IMPLEMENTED,NOT_RUN,NOT_RUN,,,UNASSIGNED,Record screenshot and output dimensions
+REC-001,STALL_RECOVERY,NOT_RUN,NOT_IMPLEMENTED,NOT_RUN,NOT_RUN,,,UNASSIGNED,Controlled network interruption
+LIFE-001,APP_RESUME,NOT_RUN,NOT_IMPLEMENTED,NOT_RUN,NOT_RUN,,,UNASSIGNED,Background and foreground sequence

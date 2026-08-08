@@ -1,0 +1,25 @@
+{
+  "name": "com.dazixbreed.ios-videobridge",
+  "version": "0.1.0",
+  "displayName": "iOS VideoBridge for VRChat",
+  "description": "Independent clean-room Unity and iOS video playback compatibility reference written by DAZIxBREED.",
+  "unity": "2022.3",
+  "author": {
+    "name": "DAZIxBREED"
+  },
+  "license": "MIT",
+  "keywords": [
+    "ios",
+    "video",
+    "vrchat",
+    "hls",
+    "diagnostics"
+  ],
+  "samples": [
+    {
+      "displayName": "Basic Harness",
+      "description": "Instructions for the Phase 1 standalone player harness.",
+      "path": "Samples~/BasicHarness"
+    }
+  ]
+}

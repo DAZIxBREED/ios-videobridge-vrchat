@@ -1,0 +1,14 @@
+{
+  "name": "DAZIxBREED.IOSVideoBridge.Tests",
+  "rootNamespace": "DAZIxBREED.IOSVideoBridge.Tests",
+  "references": [
+    "DAZIxBREED.IOSVideoBridge"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "autoReferenced": false
+}

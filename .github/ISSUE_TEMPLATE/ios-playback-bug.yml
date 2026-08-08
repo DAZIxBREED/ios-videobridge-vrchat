@@ -1,0 +1,58 @@
+name: iOS playback bug
+about: Report a reproducible iPhone or iPad playback failure
+body:
+  - type: markdown
+    attributes:
+      value: Do not include private URLs, tokens, cookies, DRM material, or proprietary code.
+  - type: input
+    id: device
+    attributes:
+      label: Device and iOS version
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Unity and VideoBridge versions
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Backend
+      options:
+        - Unity Reference
+        - VRChat Unity
+        - VRChat AVPro
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: media
+    attributes:
+      label: Sanitized media description
+      description: Container, codecs, HLS/VOD/live, resolution, and whether the URL is public and redistributable.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized diagnostics
