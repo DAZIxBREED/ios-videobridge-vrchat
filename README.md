@@ -10,7 +10,7 @@ Independent clean-room compatibility research and reference implementation for r
 
 Repository version: **0.1.0-phase1**
 
-- **Phase 0 — Research and Test Definition:** initial documents, failure taxonomy, compatibility matrix, logging schema, clean-room boundary, issue template, and synthetic known-good media are present.
+- **Phase 0 — Research and Test Definition:** initial documents, failure taxonomy, compatibility matrix, logging schema, clean-room boundary, issue template, and reproducible synthetic-media generation tooling are present.
 - **Phase 1 — Standalone Unity Test Harness:** a runnable Unity `VideoPlayer` reference backend, URL analyzer, diagnostics logger, bounded stall recovery, lifecycle recovery, test UI, scene, tests, and iOS Xcode build command are present.
 - Native AVFoundation integration belongs to Phase 2 and is intentionally not included yet.
 
@@ -19,17 +19,27 @@ Repository version: **0.1.0-phase1**
 - Unity **2022.3.22f1**
 - iOS Build Support module for Unity
 - Xcode on macOS for an actual iPhone or iPad build
+- FFmpeg when generating the bundled synthetic MP4/HLS fixtures
 - A direct HTTPS H.264/AAC MP4 or HLS URL for network tests
 
 The repository can be opened and its Xcode project generated from a Unity Editor host with iOS Build Support. The generated Xcode project must then be compiled and signed with Xcode on macOS for local device installation.
 
 ## Open and run
 
-1. Add this repository through Unity Hub using Unity 2022.3.22f1.
-2. Open `Assets/Scenes/IOSVideoBridgeTest.unity`.
-3. Enter Play Mode.
-4. Use **Bundled MP4** for the generated local H.264/AAC sample, or paste an HTTPS media URL.
-5. Use **Export Diagnostics** to write a JSON Lines report under `Application.persistentDataPath/IOSVideoBridge/Diagnostics`.
+1. Clone the repository.
+2. Generate the synthetic H.264/AAC MP4 and HLS fixtures:
+
+   ```bash
+   ./scripts/generate-test-media.sh
+   ```
+
+3. Add the repository through Unity Hub using Unity 2022.3.22f1.
+4. Open `Assets/Scenes/IOSVideoBridgeTest.unity`.
+5. Enter Play Mode.
+6. Use **Bundled MP4** for the generated local sample, or paste an HTTPS media URL.
+7. Use **Export Diagnostics** to write a JSON Lines report under `Application.persistentDataPath/IOSVideoBridge/Diagnostics`.
+
+The four generated binary media files are reproducible fixtures rather than source code. Their Unity `.meta` files, generation script, HLS playlist template, and expected test structure are tracked in the repository.
 
 ## Build an iOS Xcode project
 
@@ -37,7 +47,7 @@ From Unity, choose:
 
 `iOS VideoBridge > Build iOS Xcode Project`
 
-The project is written to `Builds/iOS`. The build tool adds the test scene to Build Settings and applies conservative iOS defaults.
+The project is written to `Builds/iOS`. The build tool adds the test scene to Build Settings and applies conservative iOS defaults. Generate the synthetic media first if you want the build validator to include the bundled-media test.
 
 Command-line equivalent:
 
@@ -53,7 +63,7 @@ Unity -batchmode -quit \
 ```text
 Assets/
   Scenes/                         Runnable Phase 1 test scene
-  StreamingAssets/IOSVideoBridge Generated known-good MP4 and HLS test media
+  StreamingAssets/IOSVideoBridge Synthetic-media metadata and generated fixture location
 Packages/
   com.dazixbreed.ios-videobridge/
     Runtime/                      Player, recovery, analyzer, diagnostics, UI
@@ -62,7 +72,7 @@ Packages/
     Samples~/                     Package sample documentation
 docs/phase-0/                     Research and reproducibility documents
 docs/phase-1/                     Harness design and operating guide
-scripts/                          Test-media server and repository checks
+scripts/                          Test-media generation/server and repository checks
 ```
 
 ## Phase 1 scope
@@ -77,7 +87,7 @@ The Phase 1 backend wraps Unity's public `VideoPlayer` API. It supports:
 - Application pause/resume recovery
 - Bounded stall detection and reload/resume recovery
 - URL redaction before diagnostics are written
-- Local synthetic H.264/AAC media for repeatable tests
+- Reproducible local synthetic H.264/AAC media generation for repeatable tests
 
 It does **not** claim to fix VRChat's installed iOS client. It creates independent evidence and reference behavior that can be compared with VRChat's own backends.
 
