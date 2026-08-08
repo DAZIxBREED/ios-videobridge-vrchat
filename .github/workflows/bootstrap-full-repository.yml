@@ -6,12 +6,16 @@ on:
       - main
     paths:
       - '.github/workflows/bootstrap-full-repository.yml'
+  issues:
+    types:
+      - opened
 
 permissions:
   contents: write
 
 jobs:
   populate:
+    if: github.event_name == 'push' || github.event.issue.title == '[bootstrap] Populate Phase 0/1'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
