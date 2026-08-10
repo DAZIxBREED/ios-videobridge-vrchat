@@ -73,8 +73,8 @@ namespace DAZIxBREED.IOSVideoBridge
 
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("Load")) LoadCurrentUrl();
-            if (GUILayout.Button("Prepare")) { EnsureLoaded(); player.Prepare(); }
-            if (GUILayout.Button("Play")) { EnsureLoaded(); player.Play(); }
+            if (GUILayout.Button("Prepare") && EnsureLoaded()) player.Prepare();
+            if (GUILayout.Button("Play") && EnsureLoaded()) player.Play();
             if (GUILayout.Button("Pause")) player.Pause();
             if (GUILayout.Button("Stop")) player.Stop();
             GUILayout.EndHorizontal();
@@ -155,28 +155,37 @@ namespace DAZIxBREED.IOSVideoBridge
             GUI.matrix = previous;
         }
 
-        private void LoadCurrentUrl()
+        private bool LoadCurrentUrl()
         {
             player.LoadUrl(mediaUrl);
             if (player.State == VideoPlaybackState.Failed)
             {
                 lastMessage = "Load rejected. See the playback error above.";
-                return;
+                return false;
             }
 
             mediaUrl = player.CurrentUrl;
             lastMessage = "Loaded: " + SensitiveUrlRedactor.Redact(player.CurrentUrl);
+            return true;
         }
 
-        private void EnsureLoaded()
+        private bool EnsureLoaded()
         {
             string normalized;
             string error;
-            bool valid = VideoSourceNormalizer.TryNormalize(mediaUrl, out normalized, out error);
-            if (!valid || !string.Equals(player.CurrentUrl, normalized, StringComparison.Ordinal))
+            if (!VideoSourceNormalizer.TryNormalize(mediaUrl, out normalized, out error))
             {
-                LoadCurrentUrl();
+                lastMessage = "Invalid media source: " + error;
+                player.LoadUrl(mediaUrl);
+                return false;
             }
+
+            if (!string.Equals(player.CurrentUrl, normalized, StringComparison.Ordinal))
+            {
+                return LoadCurrentUrl();
+            }
+
+            return player.State != VideoPlaybackState.Failed;
         }
 
         private void OnPlayerError(string message)
