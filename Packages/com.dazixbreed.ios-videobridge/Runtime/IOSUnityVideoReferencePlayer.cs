@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Globalization;
 using UnityEngine;
 using UnityEngine.Video;
 
@@ -21,9 +22,17 @@ namespace DAZIxBREED.IOSVideoBridge
         private double pendingResumeTime = -1.0;
         private bool pendingLiveReload;
         private int prepareGeneration;
+        private bool preparationActive;
+        private Coroutine prepareTimeoutCoroutine;
         private bool firstFrameLogged;
-        private bool wasPlayingBeforePause;
-        private double pauseResumeTime;
+        private ushort preparedAudioTrackCount;
+        private bool audioRouteConfigured;
+
+        private bool applicationPaused;
+        private bool resumePlaybackAfterForeground;
+        private bool resumePreparationAfterForeground;
+        private double foregroundResumeTime;
+        private bool foregroundWasLikelyLive;
 
         public event Action<VideoPlaybackState> StateChanged;
         public event Action<string> ErrorReceived;
@@ -40,18 +49,24 @@ namespace DAZIxBREED.IOSVideoBridge
         public uint Height { get { return videoPlayer != null ? videoPlayer.height : 0; } }
         public bool IsPrepared { get { return videoPlayer != null && videoPlayer.isPrepared; } }
         public bool IsPlaying { get { return videoPlayer != null && videoPlayer.isPlaying; } }
-        public bool HasAudio { get { return videoPlayer != null && videoPlayer.isPrepared && videoPlayer.audioTrackCount > 0; } }
-        public bool IsLikelyLive { get { return IsHls(currentUrl) && (Duration <= 0.0 || double.IsInfinity(Duration)); } }
+        public bool HasAudio { get { return preparedAudioTrackCount > 0; } }
+        public ushort AudioTrackCount { get { return preparedAudioTrackCount; } }
+        public ushort ControlledAudioTrackCount { get { return videoPlayer != null ? videoPlayer.controlledAudioTrackCount : (ushort)0; } }
+        public bool AudioRouteConfigured { get { return audioRouteConfigured; } }
+        public bool IsLikelyLive { get { return VideoSourceNormalizer.IsLikelyHls(currentUrl) && (Duration <= 0.0 || double.IsInfinity(Duration)); } }
+
         public bool Loop
         {
             get { return videoPlayer != null && videoPlayer.isLooping; }
             set { if (videoPlayer != null) videoPlayer.isLooping = value; }
         }
+
         public float Volume
         {
             get { return audioSource != null ? audioSource.volume : 0f; }
             set { SetVolume(value); }
         }
+
         public float PlaybackRate
         {
             get { return videoPlayer != null ? videoPlayer.playbackSpeed : 1f; }
@@ -66,6 +81,7 @@ namespace DAZIxBREED.IOSVideoBridge
             {
                 diagnostics = GetComponent<IOSVideoDiagnostics>();
             }
+
             ConfigurePlayer();
             Subscribe();
         }
@@ -79,6 +95,7 @@ namespace DAZIxBREED.IOSVideoBridge
             videoPlayer.source = VideoSource.Url;
             videoPlayer.audioOutputMode = VideoAudioOutputMode.AudioSource;
             videoPlayer.sendFrameReadyEvents = true;
+
             audioSource.playOnAwake = false;
             audioSource.loop = false;
             audioSource.spatialBlend = 0f;
@@ -97,7 +114,11 @@ namespace DAZIxBREED.IOSVideoBridge
 
         private void Unsubscribe()
         {
-            if (videoPlayer == null) return;
+            if (videoPlayer == null)
+            {
+                return;
+            }
+
             videoPlayer.prepareCompleted -= OnPrepareCompleted;
             videoPlayer.started -= OnStarted;
             videoPlayer.loopPointReached -= OnLoopPointReached;
@@ -109,66 +130,112 @@ namespace DAZIxBREED.IOSVideoBridge
 
         public void LoadUrl(string url)
         {
-            if (string.IsNullOrWhiteSpace(url))
+            string normalized;
+            string error;
+            if (!VideoSourceNormalizer.TryNormalize(url, out normalized, out error))
             {
-                Fail("A media URL or local path is required.");
+                CancelPreparation();
+                if (videoPlayer != null)
+                {
+                    videoPlayer.Stop();
+                }
+                currentUrl = string.Empty;
+                ResetPlaybackMetadata();
+                Fail(error);
                 return;
             }
 
-            prepareGeneration++;
+            CancelPreparation();
             videoPlayer.Stop();
-            currentUrl = url.Trim();
+            currentUrl = normalized;
             videoPlayer.source = VideoSource.Url;
             videoPlayer.url = currentUrl;
-            firstFrameLogged = false;
             playAfterPrepare = false;
             pendingResumeTime = -1.0;
             pendingLiveReload = false;
-            SetState(VideoPlaybackState.Loaded);
-            Log("load_requested", "info", "Media URL loaded.");
+            ResetPlaybackMetadata();
+            SetState(VideoPlaybackState.Loading);
+            Log("load_requested", "info", "Media source loaded.");
         }
 
         public void Prepare()
         {
             if (string.IsNullOrWhiteSpace(currentUrl))
             {
-                Fail("Load a media URL before preparing playback.");
+                Fail("Load a media URL or rooted local path before preparing playback.");
                 return;
             }
-            StartPreparation();
+
+            if (applicationPaused)
+            {
+                resumePreparationAfterForeground = true;
+                Log("prepare_deferred", "info", "Preparation deferred while the application is paused.");
+                return;
+            }
+
+            if (preparationActive)
+            {
+                Log("prepare_ignored", "info", "Preparation is already active.");
+                return;
+            }
+
+            if (IsPrepared)
+            {
+                SetState(VideoPlaybackState.Ready);
+                Log("prepare_ignored", "info", "Media is already prepared.");
+                return;
+            }
+
+            StartPreparation(false);
         }
 
-        private void StartPreparation()
+        private void StartPreparation(bool recovering)
         {
+            CancelPreparation();
+            ConfigureAudioRoutingBeforePrepare();
             prepareGeneration++;
             int generation = prepareGeneration;
-            ConfigureAudioRouting();
-            SetState(VideoPlaybackState.Preparing);
-            Log("prepare_started", "info", "Video preparation started.");
+            preparationActive = true;
+            SetState(recovering ? VideoPlaybackState.Recovering : VideoPlaybackState.Preparing);
+            Log(recovering ? "recovery_prepare_started" : "prepare_started", "info", recovering ? "Recovery preparation started." : "Video preparation started.");
             videoPlayer.Prepare();
-            StartCoroutine(PrepareTimeout(generation));
+            prepareTimeoutCoroutine = StartCoroutine(PrepareTimeout(generation));
         }
 
         private IEnumerator PrepareTimeout(int generation)
         {
             float deadline = Time.realtimeSinceStartup + Mathf.Max(2f, prepareTimeoutSeconds);
-            while (generation == prepareGeneration && !videoPlayer.isPrepared && state == VideoPlaybackState.Preparing && Time.realtimeSinceStartup < deadline)
+            while (preparationActive && generation == prepareGeneration && !videoPlayer.isPrepared && Time.realtimeSinceStartup < deadline)
             {
                 yield return null;
             }
-            if (generation == prepareGeneration && !videoPlayer.isPrepared && state == VideoPlaybackState.Preparing)
+
+            if (!preparationActive || generation != prepareGeneration || videoPlayer.isPrepared)
             {
-                Fail("Video preparation timed out after " + prepareTimeoutSeconds.ToString("0.0") + " seconds.");
+                yield break;
             }
+
+            preparationActive = false;
+            prepareTimeoutCoroutine = null;
+            prepareGeneration++;
+            videoPlayer.Stop();
+            ResetPlaybackMetadata();
+            Fail("Video preparation timed out after " + prepareTimeoutSeconds.ToString("0.0", CultureInfo.InvariantCulture) + " seconds.");
         }
 
-        private void ConfigureAudioRouting()
+        private void ConfigureAudioRoutingBeforePrepare()
         {
+            preparedAudioTrackCount = 0;
+            audioRouteConfigured = false;
+
             try
             {
-                videoPlayer.controlledAudioTrackCount = 1;
-                videoPlayer.EnableAudioTrack(0, true);
-                videoPlayer.SetTargetAudioSource(0, audioSource);
+                videoPlayer.controlledAudioTrackCount = VideoPlayer.controlledAudioTrackMaxCount > 0 ? (ushort)1 : (ushort)0;
+                if (videoPlayer.controlledAudioTrackCount > 0)
+                {
+                    videoPlayer.EnableAudioTrack(0, true);
+                    videoPlayer.SetTargetAudioSource(0, audioSource);
+                }
             }
             catch (Exception exception)
             {
@@ -178,33 +245,69 @@ namespace DAZIxBREED.IOSVideoBridge
 
         public void Play()
         {
+            if (string.IsNullOrWhiteSpace(currentUrl))
+            {
+                Fail("Load a media source before starting playback.");
+                return;
+            }
+
+            if (applicationPaused)
+            {
+                playAfterPrepare = true;
+                resumePlaybackAfterForeground = true;
+                Log("play_deferred", "info", "Playback deferred while the application is paused.");
+                return;
+            }
+
+            if (preparationActive)
+            {
+                playAfterPrepare = true;
+                Log("play_queued", "info", "Playback will begin after preparation completes.");
+                return;
+            }
+
             if (!IsPrepared)
             {
                 playAfterPrepare = true;
-                Prepare();
+                StartPreparation(false);
                 return;
             }
+
             videoPlayer.Play();
             SetState(VideoPlaybackState.Playing);
         }
 
         public void Pause()
         {
-            if (videoPlayer == null) return;
+            if (videoPlayer == null || (!IsPlaying && state != VideoPlaybackState.Buffering && state != VideoPlaybackState.Recovering))
+            {
+                Log("pause_rejected", "warning", "Pause was requested while playback was not active.");
+                return;
+            }
+
+            playAfterPrepare = false;
             videoPlayer.Pause();
             SetState(VideoPlaybackState.Paused);
-            Log("playback_paused", "info", "Playback paused.");
+            Log("playback_paused", "info", "Playback paused by the caller.");
         }
 
         public void Stop()
         {
-            if (videoPlayer == null) return;
-            prepareGeneration++;
+            if (videoPlayer == null)
+            {
+                return;
+            }
+
+            CancelPreparation();
             playAfterPrepare = false;
             pendingResumeTime = -1.0;
+            pendingLiveReload = false;
+            resumePlaybackAfterForeground = false;
+            resumePreparationAfterForeground = false;
             videoPlayer.Stop();
+            ResetPlaybackMetadata();
             SetState(VideoPlaybackState.Stopped);
-            Log("playback_stopped", "info", "Playback stopped.");
+            Log("playback_stopped", "info", "Playback stopped and prepared resources were released.");
         }
 
         public void Seek(double seconds)
@@ -215,74 +318,132 @@ namespace DAZIxBREED.IOSVideoBridge
                 return;
             }
 
-            double target = Math.Max(0.0, seconds);
-            if (Duration > 0.0 && !double.IsInfinity(Duration))
+            double target;
+            if (!VideoSeekUtility.TryClampTarget(seconds, Duration, out target))
             {
-                target = Math.Min(target, Math.Max(0.0, Duration - 0.05));
+                Log("seek_rejected", "warning", "The requested seek target was NaN or infinite.");
+                return;
             }
+
             videoPlayer.time = target;
-            Log("seek_requested", "info", "Seek requested.", "{\"targetSeconds\":" + target.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + "}");
+            Log(
+                "seek_requested",
+                "info",
+                "Seek requested.",
+                "{\"requestedSeconds\":" + seconds.ToString("0.###", CultureInfo.InvariantCulture) +
+                ",\"targetSeconds\":" + target.ToString("0.###", CultureInfo.InvariantCulture) + "}");
         }
 
         public void SetVolume(float volume)
         {
-            if (audioSource != null) audioSource.volume = Mathf.Clamp01(volume);
+            if (audioSource != null)
+            {
+                audioSource.volume = Mathf.Clamp01(volume);
+            }
         }
 
         public void SetPlaybackRate(float rate)
         {
-            if (videoPlayer != null && videoPlayer.canSetPlaybackSpeed)
+            if (videoPlayer == null)
             {
-                videoPlayer.playbackSpeed = Mathf.Clamp(rate, 0.25f, 4f);
+                return;
             }
+
+            if (!videoPlayer.canSetPlaybackSpeed)
+            {
+                Log("playback_rate_rejected", "warning", "The current platform or media does not allow playback-speed changes.");
+                return;
+            }
+
+            videoPlayer.playbackSpeed = Mathf.Clamp(rate, 0.25f, 4f);
         }
 
         public void ReloadAndResume(double resumeTime, bool live)
         {
-            if (string.IsNullOrWhiteSpace(currentUrl)) return;
-            prepareGeneration++;
+            if (string.IsNullOrWhiteSpace(currentUrl))
+            {
+                Log("reload_rejected", "warning", "Reload was requested without a loaded media source.");
+                return;
+            }
+
+            if (applicationPaused)
+            {
+                resumePlaybackAfterForeground = true;
+                foregroundResumeTime = Math.Max(0.0, resumeTime);
+                foregroundWasLikelyLive = live;
+                Log("reload_deferred", "info", "Reload deferred until the application resumes.");
+                return;
+            }
+
+            CancelPreparation();
             videoPlayer.Stop();
+            ResetPlaybackMetadata();
             pendingResumeTime = live ? -1.0 : Math.Max(0.0, resumeTime);
             pendingLiveReload = live;
             playAfterPrepare = true;
             SetState(VideoPlaybackState.Recovering);
             Log("reload_requested", "warning", live ? "Reloading likely-live media." : "Reloading media and restoring position.");
-            StartPreparation();
+            StartPreparation(true);
         }
 
         public void MarkStalled(string message)
         {
-            SetState(VideoPlaybackState.Stalled);
+            SetState(VideoPlaybackState.Buffering);
             Log("stall_suspected", "warning", message);
         }
 
         public void MarkRecovered(string message)
         {
-            SetState(VideoPlaybackState.Playing);
+            SetState(IsPlaying ? VideoPlaybackState.Playing : VideoPlaybackState.Ready);
             Log("playback_recovered", "info", message);
+        }
+
+        public void MarkRecoveryFailed(string message)
+        {
+            Fail(message);
         }
 
         public void Release()
         {
-            prepareGeneration++;
+            CancelPreparation();
             StopAllCoroutines();
-            if (videoPlayer != null) videoPlayer.Stop();
+            if (videoPlayer != null)
+            {
+                videoPlayer.Stop();
+            }
+
             currentUrl = string.Empty;
-            SetState(VideoPlaybackState.Released);
-            Log("released", "info", "Player resources released.");
+            playAfterPrepare = false;
+            pendingResumeTime = -1.0;
+            pendingLiveReload = false;
+            resumePlaybackAfterForeground = false;
+            resumePreparationAfterForeground = false;
+            ResetPlaybackMetadata();
+            SetState(VideoPlaybackState.Idle);
+            Log("released", "info", "Player resources released and state reset to Idle.");
         }
 
         private void OnPrepareCompleted(VideoPlayer source)
         {
+            if (!preparationActive)
+            {
+                Log("prepare_callback_ignored", "warning", "Ignored a stale prepare-completed callback after preparation had already been cancelled or failed.");
+                return;
+            }
+
+            preparationActive = false;
             prepareGeneration++;
+            StopPrepareTimeoutCoroutine();
+
+            preparedAudioTrackCount = source.audioTrackCount;
+            audioRouteConfigured = false;
             try
             {
-                if (source.audioTrackCount > 0)
+                if (preparedAudioTrackCount > 0 && source.controlledAudioTrackCount > 0)
                 {
-                    source.controlledAudioTrackCount = 1;
                     source.EnableAudioTrack(0, true);
                     source.SetTargetAudioSource(0, audioSource);
-                    Log("audio_route_ready", "info", "At least one media audio track is routed to the Unity AudioSource.");
+                    audioRouteConfigured = true;
                 }
             }
             catch (Exception exception)
@@ -290,14 +451,30 @@ namespace DAZIxBREED.IOSVideoBridge
                 Log("audio_route_ready", "warning", "Prepared media could not be routed to the Unity AudioSource: " + exception.Message);
             }
 
-            SetState(VideoPlaybackState.Prepared);
-            Log("prepared", "info", "Media prepared.");
-            if (Prepared != null) Prepared();
+            Log(
+                "audio_tracks_discovered",
+                preparedAudioTrackCount > 0 ? "info" : "warning",
+                preparedAudioTrackCount > 0 ? "Prepared media reported audio tracks." : "Prepared media reported no audio tracks.",
+                "{\"audioTrackCount\":" + preparedAudioTrackCount +
+                ",\"controlledAudioTrackCount\":" + source.controlledAudioTrackCount +
+                ",\"routeConfigured\":" + (audioRouteConfigured ? "true" : "false") + "}");
+
+            SetState(VideoPlaybackState.Ready);
+            Log("prepared", "info", "Media prepared and source metadata is available.");
+            if (Prepared != null)
+            {
+                Prepared();
+            }
 
             if (!pendingLiveReload && pendingResumeTime >= 0.0 && source.canSetTime)
             {
-                source.time = pendingResumeTime;
+                double target;
+                if (VideoSeekUtility.TryClampTarget(pendingResumeTime, source.length, out target))
+                {
+                    source.time = target;
+                }
             }
+
             pendingResumeTime = -1.0;
             pendingLiveReload = false;
 
@@ -316,13 +493,20 @@ namespace DAZIxBREED.IOSVideoBridge
 
         private void OnLoopPointReached(VideoPlayer source)
         {
-            if (source.isLooping) return;
-            SetState(VideoPlaybackState.Completed);
-            Log("playback_completed", "info", "Playback reached the end of the media.");
+            if (source.isLooping)
+            {
+                SetState(VideoPlaybackState.Playing);
+                Log("loop_iteration", "info", "Looping media reached its loop point and continued playback.");
+                return;
+            }
+
+            SetState(VideoPlaybackState.Ready);
+            Log("playback_completed", "info", "Playback reached the end of the media and remains prepared.");
         }
 
         private void OnErrorReceived(VideoPlayer source, string message)
         {
+            CancelPreparation();
             Fail(message);
         }
 
@@ -333,7 +517,11 @@ namespace DAZIxBREED.IOSVideoBridge
 
         private void OnFrameReady(VideoPlayer source, long frameIndex)
         {
-            if (firstFrameLogged) return;
+            if (firstFrameLogged)
+            {
+                return;
+            }
+
             firstFrameLogged = true;
             Log("first_frame", "info", "First video frame became available.");
         }
@@ -345,46 +533,147 @@ namespace DAZIxBREED.IOSVideoBridge
 
         private void OnApplicationPause(bool paused)
         {
+            if (applicationPaused == paused)
+            {
+                return;
+            }
+
+            applicationPaused = paused;
             if (paused)
             {
-                wasPlayingBeforePause = IsPlaying;
-                pauseResumeTime = CurrentTime;
-                if (wasPlayingBeforePause) Pause();
+                foregroundResumeTime = CurrentTime;
+                foregroundWasLikelyLive = IsLikelyLive;
+                resumePlaybackAfterForeground = IsPlaying ||
+                                                state == VideoPlaybackState.Playing ||
+                                                state == VideoPlaybackState.Buffering ||
+                                                state == VideoPlaybackState.Recovering;
+                resumePreparationAfterForeground = preparationActive || state == VideoPlaybackState.Preparing;
+
+                if (resumePreparationAfterForeground)
+                {
+                    CancelPreparation();
+                    videoPlayer.Stop();
+                    ResetPlaybackMetadata();
+                    SetState(VideoPlaybackState.Loading);
+                }
+                else if (resumePlaybackAfterForeground)
+                {
+                    if (videoPlayer.isPlaying)
+                    {
+                        videoPlayer.Pause();
+                    }
+                    SetState(VideoPlaybackState.Paused);
+                }
+
+                Log(
+                    "application_paused",
+                    "info",
+                    "Application pause recorded separately from user pause.",
+                    "{\"resumePlayback\":" + (resumePlaybackAfterForeground ? "true" : "false") +
+                    ",\"resumePreparation\":" + (resumePreparationAfterForeground ? "true" : "false") + "}");
+                return;
             }
-            else if (wasPlayingBeforePause && !string.IsNullOrWhiteSpace(currentUrl))
+
+            bool shouldResumePlayback = resumePlaybackAfterForeground;
+            bool shouldResumePreparation = resumePreparationAfterForeground;
+            double resumeTime = foregroundResumeTime;
+            bool live = foregroundWasLikelyLive;
+            resumePlaybackAfterForeground = false;
+            resumePreparationAfterForeground = false;
+
+            Log("application_resumed", "info", "Application returned to the foreground.");
+
+            if (shouldResumePlayback && !string.IsNullOrWhiteSpace(currentUrl))
             {
-                wasPlayingBeforePause = false;
-                ReloadAndResume(pauseResumeTime, IsHls(currentUrl));
+                ReloadAndResume(resumeTime, live);
             }
+            else if (shouldResumePreparation && !string.IsNullOrWhiteSpace(currentUrl))
+            {
+                Prepare();
+            }
+        }
+
+        private void CancelPreparation()
+        {
+            prepareGeneration++;
+            preparationActive = false;
+            StopPrepareTimeoutCoroutine();
+        }
+
+        private void StopPrepareTimeoutCoroutine()
+        {
+            if (prepareTimeoutCoroutine == null)
+            {
+                return;
+            }
+
+            StopCoroutine(prepareTimeoutCoroutine);
+            prepareTimeoutCoroutine = null;
+        }
+
+        private void ResetPlaybackMetadata()
+        {
+            firstFrameLogged = false;
+            preparedAudioTrackCount = 0;
+            audioRouteConfigured = false;
         }
 
         private void Fail(string message)
         {
-            SetState(VideoPlaybackState.Error);
-            Log("playback_error", "error", string.IsNullOrWhiteSpace(message) ? "Unknown video playback error." : message);
-            if (ErrorReceived != null) ErrorReceived(message ?? string.Empty);
+            playAfterPrepare = false;
+            string safeMessage = string.IsNullOrWhiteSpace(message) ? "Unknown video playback error." : message;
+            SetState(VideoPlaybackState.Failed);
+            Log("playback_error", "error", safeMessage);
+            if (ErrorReceived != null)
+            {
+                ErrorReceived(safeMessage);
+            }
         }
 
-        private void SetState(VideoPlaybackState next)
+        private bool SetState(VideoPlaybackState next)
         {
-            if (state == next) return;
+            if (state == next)
+            {
+                return true;
+            }
+
+            VideoPlaybackState previous = state;
+            if (!VideoPlaybackStatePolicy.CanTransition(previous, next))
+            {
+                Log(
+                    "state_transition_rejected",
+                    "error",
+                    "Rejected invalid playback-state transition.",
+                    "{\"from\":\"" + previous + "\",\"to\":\"" + next + "\"}");
+                return false;
+            }
+
             state = next;
-            if (StateChanged != null) StateChanged(state);
+            Log(
+                "state_transition",
+                "info",
+                "Playback state changed.",
+                "{\"from\":\"" + previous + "\",\"to\":\"" + next + "\"}");
+            if (StateChanged != null)
+            {
+                StateChanged(state);
+            }
+            return true;
         }
 
         private void Log(string eventName, string severity, string message, string detailsJson = "")
         {
-            if (diagnostics == null) return;
-            diagnostics.Log("playback", eventName, severity, message, currentUrl, CurrentTime, Duration, CurrentFrame, FrameRate, Width, Height, detailsJson);
-        }
+            if (diagnostics == null)
+            {
+                return;
+            }
 
-        private static bool IsHls(string value)
-        {
-            return !string.IsNullOrWhiteSpace(value) && value.IndexOf(".m3u8", StringComparison.OrdinalIgnoreCase) >= 0;
+            diagnostics.Log("playback", eventName, severity, message, currentUrl, CurrentTime, Duration, CurrentFrame, FrameRate, Width, Height, detailsJson);
         }
 
         private void OnDestroy()
         {
+            CancelPreparation();
             Unsubscribe();
         }
     }
