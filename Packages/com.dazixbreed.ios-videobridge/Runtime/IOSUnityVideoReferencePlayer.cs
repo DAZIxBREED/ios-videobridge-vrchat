@@ -27,6 +27,7 @@ namespace DAZIxBREED.IOSVideoBridge
         private bool firstFrameLogged;
         private ushort preparedAudioTrackCount;
         private bool audioRouteConfigured;
+        private float requestedPlaybackRate = 1f;
 
         private bool applicationPaused;
         private bool resumePlaybackAfterForeground;
@@ -69,7 +70,7 @@ namespace DAZIxBREED.IOSVideoBridge
 
         public float PlaybackRate
         {
-            get { return videoPlayer != null ? videoPlayer.playbackSpeed : 1f; }
+            get { return requestedPlaybackRate; }
             set { SetPlaybackRate(value); }
         }
 
@@ -95,6 +96,7 @@ namespace DAZIxBREED.IOSVideoBridge
             videoPlayer.source = VideoSource.Url;
             videoPlayer.audioOutputMode = VideoAudioOutputMode.AudioSource;
             videoPlayer.sendFrameReadyEvents = true;
+            videoPlayer.playbackSpeed = 1f;
 
             audioSource.playOnAwake = false;
             audioSource.loop = false;
@@ -181,8 +183,7 @@ namespace DAZIxBREED.IOSVideoBridge
 
             if (IsPrepared)
             {
-                SetState(VideoPlaybackState.Ready);
-                Log("prepare_ignored", "info", "Media is already prepared.");
+                Log("prepare_ignored", "info", "Media is already prepared; the current playback state was preserved.");
                 return;
             }
 
@@ -198,8 +199,8 @@ namespace DAZIxBREED.IOSVideoBridge
             preparationActive = true;
             SetState(recovering ? VideoPlaybackState.Recovering : VideoPlaybackState.Preparing);
             Log(recovering ? "recovery_prepare_started" : "prepare_started", "info", recovering ? "Recovery preparation started." : "Video preparation started.");
-            videoPlayer.Prepare();
             prepareTimeoutCoroutine = StartCoroutine(PrepareTimeout(generation));
+            videoPlayer.Prepare();
         }
 
         private IEnumerator PrepareTimeout(int generation)
@@ -273,6 +274,7 @@ namespace DAZIxBREED.IOSVideoBridge
                 return;
             }
 
+            ApplyRequestedPlaybackRate();
             videoPlayer.Play();
             SetState(VideoPlaybackState.Playing);
         }
@@ -344,18 +346,36 @@ namespace DAZIxBREED.IOSVideoBridge
 
         public void SetPlaybackRate(float rate)
         {
-            if (videoPlayer == null)
+            float target = Mathf.Clamp(rate, 0.25f, 4f);
+            if (Mathf.Abs(requestedPlaybackRate - target) < 0.0001f)
+            {
+                return;
+            }
+
+            requestedPlaybackRate = target;
+            if (IsPrepared)
+            {
+                ApplyRequestedPlaybackRate();
+            }
+        }
+
+        private void ApplyRequestedPlaybackRate()
+        {
+            if (videoPlayer == null || !IsPrepared)
             {
                 return;
             }
 
             if (!videoPlayer.canSetPlaybackSpeed)
             {
-                Log("playback_rate_rejected", "warning", "The current platform or media does not allow playback-speed changes.");
+                if (Mathf.Abs(requestedPlaybackRate - 1f) > 0.0001f)
+                {
+                    Log("playback_rate_rejected", "warning", "The current platform or media does not allow playback-speed changes; requested rate remains recorded for diagnostics.");
+                }
                 return;
             }
 
-            videoPlayer.playbackSpeed = Mathf.Clamp(rate, 0.25f, 4f);
+            videoPlayer.playbackSpeed = requestedPlaybackRate;
         }
 
         public void ReloadAndResume(double resumeTime, bool live)
@@ -418,6 +438,7 @@ namespace DAZIxBREED.IOSVideoBridge
             pendingLiveReload = false;
             resumePlaybackAfterForeground = false;
             resumePreparationAfterForeground = false;
+            requestedPlaybackRate = 1f;
             ResetPlaybackMetadata();
             SetState(VideoPlaybackState.Idle);
             Log("released", "info", "Player resources released and state reset to Idle.");
@@ -460,6 +481,7 @@ namespace DAZIxBREED.IOSVideoBridge
                 ",\"routeConfigured\":" + (audioRouteConfigured ? "true" : "false") + "}");
 
             SetState(VideoPlaybackState.Ready);
+            ApplyRequestedPlaybackRate();
             Log("prepared", "info", "Media prepared and source metadata is available.");
             if (Prepared != null)
             {
