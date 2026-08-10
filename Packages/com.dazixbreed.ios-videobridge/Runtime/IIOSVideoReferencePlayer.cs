@@ -18,6 +18,9 @@ namespace DAZIxBREED.IOSVideoBridge
         bool IsPlaying { get; }
         bool IsLikelyLive { get; }
         bool HasAudio { get; }
+        ushort AudioTrackCount { get; }
+        ushort ControlledAudioTrackCount { get; }
+        bool AudioRouteConfigured { get; }
 
         void LoadUrl(string url);
         void Prepare();
