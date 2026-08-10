@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Project governance
+
+- Added `ROADMAP.md` as the canonical development and release contract through `v1.0.0`.
+- Locked the programming dependency order from Phase 1 stabilization through native AVPlayer, texture, audio, HLS, recovery, VRChat comparison, automation, submission tooling, and stable release.
+- Added `docs/RELEASE_POLICY.md` defining version advancement, prerelease naming, release gates, tagging rules, and roadmap-amendment procedure.
+- Updated `README.md` and `CONTRIBUTING.md` to make roadmap compliance normative for future development.
+- Locked `v0.1.1` as the next development milestone.
+
 ## 0.1.0-phase1 — 2026-08-05
 
 ### Added
