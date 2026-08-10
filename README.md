@@ -8,11 +8,14 @@ Independent clean-room compatibility research and reference implementation for r
 
 ## Current status
 
-Repository version: **0.1.0-phase1**
+Repository version: **0.1.1-dev.1** — v0.1.1 implementation candidate pending Unity/iOS validation.
 
 - **Phase 0 — Research and Test Definition:** initial documents, failure taxonomy, compatibility matrix, logging schema, clean-room boundary, issue template, and reproducible synthetic-media generation tooling are present.
 - **Phase 1 — Standalone Unity Test Harness:** a runnable Unity `VideoPlayer` reference backend, URL analyzer, diagnostics logger, bounded stall recovery, lifecycle recovery, test UI, scene, tests, and iOS Xcode build command are present.
-- Native AVFoundation integration belongs to Phase 2 and is intentionally not included yet.
+- **v0.1.1 stabilization work on `main`:** explicit playback-state transitions, source normalization, stale-prepare protection, timeout teardown, deterministic seek clamping, improved audio-track reporting, lifecycle/user-pause separation, bounded recovery failure state, and expanded edit-mode tests.
+- Native AVFoundation integration remains deferred until the v0.1.x stabilization train reaches the Phase 1 API freeze.
+
+The final `v0.1.1` tag is intentionally **not** published until the release-policy validation gate is satisfied in Unity 2022.3.22f1 and the relevant device checks are recorded.
 
 ## Development contract
 
@@ -20,7 +23,7 @@ The canonical release and programming plan is [`ROADMAP.md`](ROADMAP.md). Releas
 
 Release/version mechanics are defined in [`docs/RELEASE_POLICY.md`](docs/RELEASE_POLICY.md).
 
-**Locked next milestone:** `v0.1.1` — Phase 1 stabilization and harness/runtime fixes. Native AVFoundation work begins only after the v0.1.x reference-player state contract is sufficiently stable for comparison testing.
+**Current milestone:** `v0.1.1` — Phase 1 stabilization and harness/runtime fixes. Native AVFoundation work begins only after the v0.1.x reference-player state contract is sufficiently stable for comparison testing.
 
 Material changes to the roadmap require an explicit **Roadmap Amendment** and a matching `CHANGELOG.md` entry.
 
@@ -46,7 +49,7 @@ The repository can be opened and its Xcode project generated from a Unity Editor
 3. Add the repository through Unity Hub using Unity 2022.3.22f1.
 4. Open `Assets/Scenes/IOSVideoBridgeTest.unity`.
 5. Enter Play Mode.
-6. Use **Bundled MP4** for the generated local sample, or paste an HTTPS media URL.
+6. Use **Bundled MP4** for the generated local sample, or paste an absolute HTTPS media URL/rooted local path.
 7. Use **Export Diagnostics** to write a JSON Lines report under `Application.persistentDataPath/IOSVideoBridge/Diagnostics`.
 
 The four generated binary media files are reproducible fixtures rather than source code. Their Unity `.meta` files, generation script, HLS playlist template, and expected test structure are tracked in the repository.
@@ -76,7 +79,7 @@ Assets/
   StreamingAssets/IOSVideoBridge Synthetic-media metadata and generated fixture location
 Packages/
   com.dazixbreed.ios-videobridge/
-    Runtime/                      Player, recovery, analyzer, diagnostics, UI
+    Runtime/                      Player, state policy, recovery, analyzer, diagnostics, UI
     Editor/                       iOS build and project validation tools
     Tests/EditMode/               Deterministic edit-mode tests
     Samples~/                     Package sample documentation
@@ -90,13 +93,14 @@ scripts/                          Test-media generation/server and repository ch
 The Phase 1 backend wraps Unity's public `VideoPlayer` API. It supports:
 
 - Direct MP4 and basic HLS URL preparation
+- Explicit Idle/Loading/Preparing/Ready/Playing/Paused/Buffering/Recovering/Failed/Stopped states
 - Play, pause, stop, seek, looping, speed, and volume
 - API-only texture output drawn by the test harness
-- Unity `AudioSource` routing
-- First-frame, first-audio approximation, dropped-frame, error, and state logging
-- Application pause/resume recovery
+- Unity `AudioSource` routing with discovered/controlled track counts
+- First-frame, error, state-transition, recovery, and lifecycle logging
+- Application pause/resume recovery kept distinct from user pause commands
 - Bounded stall detection and reload/resume recovery
-- URL redaction before diagnostics are written
+- URL validation/redaction before diagnostics are written
 - Reproducible local synthetic H.264/AAC media generation for repeatable tests
 
 It does **not** claim to fix VRChat's installed iOS client. It creates independent evidence and reference behavior that can be compared with VRChat's own backends.
