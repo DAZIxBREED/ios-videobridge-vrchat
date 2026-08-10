@@ -33,7 +33,8 @@ namespace DAZIxBREED.IOSVideoBridge
                            next == VideoPlaybackState.Failed;
 
                 case VideoPlaybackState.Playing:
-                    return next == VideoPlaybackState.Paused ||
+                    return next == VideoPlaybackState.Ready ||
+                           next == VideoPlaybackState.Paused ||
                            next == VideoPlaybackState.Buffering ||
                            next == VideoPlaybackState.Recovering ||
                            next == VideoPlaybackState.Loading ||
@@ -59,6 +60,7 @@ namespace DAZIxBREED.IOSVideoBridge
                     return next == VideoPlaybackState.Preparing ||
                            next == VideoPlaybackState.Ready ||
                            next == VideoPlaybackState.Playing ||
+                           next == VideoPlaybackState.Paused ||
                            next == VideoPlaybackState.Loading ||
                            next == VideoPlaybackState.Stopped ||
                            next == VideoPlaybackState.Failed;
