@@ -1,6 +1,6 @@
 {
   "name": "com.dazixbreed.ios-videobridge",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "displayName": "iOS VideoBridge for VRChat",
   "description": "Independent clean-room Unity and iOS video playback compatibility reference written by DAZIxBREED.",
   "unity": "2022.3",
