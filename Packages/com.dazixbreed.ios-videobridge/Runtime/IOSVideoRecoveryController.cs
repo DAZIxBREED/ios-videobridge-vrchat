@@ -109,7 +109,7 @@ namespace DAZIxBREED.IOSVideoBridge
                         yield break;
                     }
 
-                    if (player.State == VideoPlaybackState.Error)
+                    if (player.State == VideoPlaybackState.Failed)
                     {
                         break;
                     }
@@ -123,7 +123,9 @@ namespace DAZIxBREED.IOSVideoBridge
                 }
             }
 
-            Log("recovery_exhausted", "error", "Automatic recovery stopped after the configured attempt limit.");
+            string failureMessage = "Automatic recovery stopped after the configured attempt limit.";
+            Log("recovery_exhausted", "error", failureMessage);
+            player.MarkRecoveryFailed(failureMessage);
             recoveryInProgress = false;
             enabled = false;
         }
@@ -149,6 +151,7 @@ namespace DAZIxBREED.IOSVideoBridge
                 lastMediaTime = 0.0;
                 lastFrame = -1;
             }
+
             lastProgressRealtime = Time.realtimeSinceStartup;
             nextSampleRealtime = Time.realtimeSinceStartup + sampleIntervalSeconds;
         }
