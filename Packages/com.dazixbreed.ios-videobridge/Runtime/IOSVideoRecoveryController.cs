@@ -125,7 +125,10 @@ namespace DAZIxBREED.IOSVideoBridge
 
             string failureMessage = "Automatic recovery stopped after the configured attempt limit.";
             Log("recovery_exhausted", "error", failureMessage);
-            player.MarkRecoveryFailed(failureMessage);
+            if (player.State != VideoPlaybackState.Failed)
+            {
+                player.MarkRecoveryFailed(failureMessage);
+            }
             recoveryInProgress = false;
             enabled = false;
         }
