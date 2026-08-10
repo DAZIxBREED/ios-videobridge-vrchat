@@ -45,14 +45,14 @@ namespace DAZIxBREED.IOSVideoBridge
         private void OnGUI()
         {
             const float margin = 16f;
-            float panelWidth = Mathf.Min(470f, Screen.width * 0.42f);
+            float panelWidth = Mathf.Min(490f, Screen.width * 0.44f);
             Rect panel = new Rect(margin, margin, panelWidth, Screen.height - margin * 2f);
             GUILayout.BeginArea(panel, GUI.skin.box);
 
-            GUILayout.Label("iOS VideoBridge for VRChat — Phase 1");
+            GUILayout.Label("iOS VideoBridge for VRChat — Phase 1 / v0.1.1");
             GUILayout.Label("DAZIxBREED | " + IOSVideoBridgeVersion.Value);
             GUILayout.Space(6f);
-            GUILayout.Label("Media URL or local path");
+            GUILayout.Label("Media URL or rooted local path");
             mediaUrl = GUILayout.TextField(mediaUrl ?? string.Empty);
 
             GUILayout.BeginHorizontal();
@@ -82,7 +82,7 @@ namespace DAZIxBREED.IOSVideoBridge
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("-10s")) player.Seek(player.CurrentTime - 10.0);
             if (GUILayout.Button("+10s")) player.Seek(player.CurrentTime + 10.0);
-            if (GUILayout.Button("Reload / Live")) player.ReloadAndResume(player.CurrentTime, player.IsLikelyLive || IsHls(mediaUrl));
+            if (GUILayout.Button("Reload / Live")) player.ReloadAndResume(player.CurrentTime, player.IsLikelyLive || VideoSourceNormalizer.IsLikelyHls(mediaUrl));
             if (GUILayout.Button("Reset Recovery")) recovery.ResetRecoveryBudget();
             GUILayout.EndHorizontal();
 
@@ -105,7 +105,8 @@ namespace DAZIxBREED.IOSVideoBridge
             GUILayout.Label("State: " + player.State);
             GUILayout.Label("Time: " + player.CurrentTime.ToString("0.00") + " / " + FormatDuration(player.Duration));
             GUILayout.Label("Frame: " + player.CurrentFrame + " | " + player.Width + "×" + player.Height + " @ " + player.FrameRate.ToString("0.##") + " fps");
-            GUILayout.Label("Audio tracks detected: " + (player.HasAudio ? "yes" : "not yet / none"));
+            GUILayout.Label("Audio tracks: " + player.AudioTrackCount + " | controlled: " + player.ControlledAudioTrackCount);
+            GUILayout.Label("Audio route: " + (player.AudioRouteConfigured ? "configured" : (player.HasAudio ? "not configured" : "not available yet / none")));
             GUILayout.Label("Recovery attempts: " + recovery.ConsecutiveAttempts + (recovery.RecoveryInProgress ? " (active)" : string.Empty));
             GUILayout.Label("Last: " + lastMessage);
 
@@ -157,12 +158,22 @@ namespace DAZIxBREED.IOSVideoBridge
         private void LoadCurrentUrl()
         {
             player.LoadUrl(mediaUrl);
-            lastMessage = "Loaded: " + SensitiveUrlRedactor.Redact(mediaUrl);
+            if (player.State == VideoPlaybackState.Failed)
+            {
+                lastMessage = "Load rejected. See the playback error above.";
+                return;
+            }
+
+            mediaUrl = player.CurrentUrl;
+            lastMessage = "Loaded: " + SensitiveUrlRedactor.Redact(player.CurrentUrl);
         }
 
         private void EnsureLoaded()
         {
-            if (!string.Equals(player.CurrentUrl, mediaUrl, StringComparison.Ordinal))
+            string normalized;
+            string error;
+            bool valid = VideoSourceNormalizer.TryNormalize(mediaUrl, out normalized, out error);
+            if (!valid || !string.Equals(player.CurrentUrl, normalized, StringComparison.Ordinal))
             {
                 LoadCurrentUrl();
             }
@@ -182,11 +193,6 @@ namespace DAZIxBREED.IOSVideoBridge
         {
             if (seconds <= 0.0 || double.IsInfinity(seconds) || double.IsNaN(seconds)) return "live/unknown";
             return seconds.ToString("0.00");
-        }
-
-        private static bool IsHls(string value)
-        {
-            return !string.IsNullOrWhiteSpace(value) && value.IndexOf(".m3u8", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private void OnDestroy()
