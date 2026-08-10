@@ -31,24 +31,22 @@ namespace DAZIxBREED.IOSVideoBridge
                 expectedCompatibility = "Unknown"
             };
 
-            if (string.IsNullOrWhiteSpace(input))
+            string normalized;
+            string normalizationError;
+            if (!VideoSourceNormalizer.TryNormalize(input, out normalized, out normalizationError))
             {
-                report.warnings.Add("No URL or local path was supplied.");
+                report.warnings.Add(normalizationError);
                 return report;
             }
+
+            report.inputUrl = normalized;
+            report.sanitizedUrl = SensitiveUrlRedactor.Redact(normalized);
 
             Uri uri;
-            bool absoluteUri = Uri.TryCreate(input, UriKind.Absolute, out uri);
-            bool localPath = File.Exists(input) || input.StartsWith(Application.streamingAssetsPath, StringComparison.OrdinalIgnoreCase);
-            report.isLocalFile = localPath || (absoluteUri && uri.IsFile);
-
-            if (!absoluteUri && !report.isLocalFile)
-            {
-                report.warnings.Add("The value is not an absolute URL and does not point to an existing local file.");
-                return report;
-            }
-
+            bool absoluteUri = Uri.TryCreate(normalized, UriKind.Absolute, out uri);
+            report.isLocalFile = IsLocalSource(normalized, absoluteUri ? uri : null);
             report.isValid = true;
+
             if (absoluteUri)
             {
                 report.isHttps = string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
@@ -58,9 +56,9 @@ namespace DAZIxBREED.IOSVideoBridge
                 }
             }
 
-            string path = absoluteUri ? uri.AbsolutePath : input;
+            string path = absoluteUri ? uri.AbsolutePath : normalized;
             report.extension = Path.GetExtension(path).ToLowerInvariant();
-            report.isHls = report.extension == ".m3u8" || input.IndexOf("m3u8", StringComparison.OrdinalIgnoreCase) >= 0;
+            report.isHls = VideoSourceNormalizer.IsLikelyHls(normalized);
 
             switch (report.extension)
             {
@@ -92,9 +90,9 @@ namespace DAZIxBREED.IOSVideoBridge
                     break;
             }
 
-            if (input.IndexOf("token=", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                input.IndexOf("signature=", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                input.IndexOf("x-amz-", StringComparison.OrdinalIgnoreCase) >= 0)
+            if (normalized.IndexOf("token=", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                normalized.IndexOf("signature=", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                normalized.IndexOf("x-amz-", StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 report.warnings.Add("The URL appears signed or temporary. Re-test before expiry and never publish the original URL.");
             }
@@ -116,7 +114,8 @@ namespace DAZIxBREED.IOSVideoBridge
                 yield break;
             }
 
-            using (UnityWebRequest head = UnityWebRequest.Head(input))
+            string normalized = report.inputUrl;
+            using (UnityWebRequest head = UnityWebRequest.Head(normalized))
             {
                 head.timeout = Mathf.Max(1, requestTimeoutSeconds);
                 head.redirectLimit = 8;
@@ -126,7 +125,7 @@ namespace DAZIxBREED.IOSVideoBridge
 
             if (report.isHls)
             {
-                using (UnityWebRequest playlist = UnityWebRequest.Get(input))
+                using (UnityWebRequest playlist = UnityWebRequest.Get(normalized))
                 {
                     playlist.timeout = Mathf.Max(1, requestTimeoutSeconds);
                     playlist.redirectLimit = 8;
@@ -152,11 +151,38 @@ namespace DAZIxBREED.IOSVideoBridge
                                 report.inferredContainer = report.isLikelyLive ? "HLS live media playlist" : "HLS VOD media playlist";
                             }
                         }
+                        else
+                        {
+                            report.warnings.Add("The .m3u8 response did not contain an #EXTM3U header.");
+                        }
                     }
                 }
             }
 
             Finish(report, completed);
+        }
+
+        private static bool IsLocalSource(string normalized, Uri uri)
+        {
+            if (uri != null && uri.IsFile)
+            {
+                return true;
+            }
+
+            if (uri != null && string.Equals(uri.Scheme, "jar", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (Path.IsPathRooted(normalized))
+            {
+                return true;
+            }
+
+            return normalized.Length >= 3 &&
+                   char.IsLetter(normalized[0]) &&
+                   normalized[1] == ':' &&
+                   (normalized[2] == '\\' || normalized[2] == '/');
         }
 
         private static void ApplyNetworkResult(VideoCompatibilityReport report, UnityWebRequest request)
