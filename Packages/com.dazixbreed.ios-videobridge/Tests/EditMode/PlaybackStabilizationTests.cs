@@ -16,6 +16,7 @@ namespace DAZIxBREED.IOSVideoBridge.Tests
             Assert.IsTrue(VideoPlaybackStatePolicy.CanTransition(VideoPlaybackState.Playing, VideoPlaybackState.Buffering));
             Assert.IsTrue(VideoPlaybackStatePolicy.CanTransition(VideoPlaybackState.Buffering, VideoPlaybackState.Recovering));
             Assert.IsTrue(VideoPlaybackStatePolicy.CanTransition(VideoPlaybackState.Recovering, VideoPlaybackState.Ready));
+            Assert.IsTrue(VideoPlaybackStatePolicy.CanTransition(VideoPlaybackState.Failed, VideoPlaybackState.Recovering));
         }
 
         [Test]
@@ -24,6 +25,7 @@ namespace DAZIxBREED.IOSVideoBridge.Tests
             Assert.IsFalse(VideoPlaybackStatePolicy.CanTransition(VideoPlaybackState.Idle, VideoPlaybackState.Playing));
             Assert.IsFalse(VideoPlaybackStatePolicy.CanTransition(VideoPlaybackState.Loading, VideoPlaybackState.Ready));
             Assert.IsFalse(VideoPlaybackStatePolicy.CanTransition(VideoPlaybackState.Failed, VideoPlaybackState.Playing));
+            Assert.IsFalse(VideoPlaybackStatePolicy.CanTransition(VideoPlaybackState.Paused, VideoPlaybackState.Ready));
         }
 
         [Test]
@@ -36,6 +38,18 @@ namespace DAZIxBREED.IOSVideoBridge.Tests
 
             Assert.IsTrue(valid, error);
             Assert.AreEqual("https://cdn.example/video.mp4?token=abc123", normalized);
+        }
+
+        [Test]
+        public void SourceNormalizer_AcceptsRootedWindowsPath()
+        {
+            string normalized;
+            string error;
+
+            bool valid = VideoSourceNormalizer.TryNormalize("C:\\Media\\video.mp4", out normalized, out error);
+
+            Assert.IsTrue(valid, error);
+            Assert.AreEqual("C:\\Media\\video.mp4", normalized);
         }
 
         [Test]
