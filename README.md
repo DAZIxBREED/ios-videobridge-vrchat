@@ -14,6 +14,16 @@ Repository version: **0.1.0-phase1**
 - **Phase 1 — Standalone Unity Test Harness:** a runnable Unity `VideoPlayer` reference backend, URL analyzer, diagnostics logger, bounded stall recovery, lifecycle recovery, test UI, scene, tests, and iOS Xcode build command are present.
 - Native AVFoundation integration belongs to Phase 2 and is intentionally not included yet.
 
+## Development contract
+
+The canonical release and programming plan is [`ROADMAP.md`](ROADMAP.md). Release numbering, subsystem dependency order, and completion gates in that document are normative for this project.
+
+Release/version mechanics are defined in [`docs/RELEASE_POLICY.md`](docs/RELEASE_POLICY.md).
+
+**Locked next milestone:** `v0.1.1` — Phase 1 stabilization and harness/runtime fixes. Native AVFoundation work begins only after the v0.1.x reference-player state contract is sufficiently stable for comparison testing.
+
+Material changes to the roadmap require an explicit **Roadmap Amendment** and a matching `CHANGELOG.md` entry.
+
 ## Requirements
 
 - Unity **2022.3.22f1**
