@@ -70,6 +70,7 @@ namespace DAZIxBREED.IOSVideoBridge
 
                 case VideoPlaybackState.Failed:
                     return next == VideoPlaybackState.Loading ||
+                           next == VideoPlaybackState.Recovering ||
                            next == VideoPlaybackState.Stopped;
 
                 case VideoPlaybackState.Stopped:
